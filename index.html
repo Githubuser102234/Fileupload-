@@ -1,0 +1,50 @@
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  import { getDatabase, ref, onValue, push, set } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
+    authDomain: "fileupload-3fd69.firebaseapp.com",
+    databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",  // Add this line
+    projectId: "fileupload-3fd69",
+    storageBucket: "fileupload-3fd69.firebasestorage.app",
+    messagingSenderId: "1048191531078",
+    appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
+    measurementId: "G-WCY0SGWCQX"
+  };
+
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  // Reference to /messages in Realtime Database
+  const messagesRef = ref(db, 'messages');
+
+  // Get the messages list element from your HTML
+  const messagesList = document.getElementById('messagesList');
+
+  // Listen for new messages and update UI in real-time
+  onValue(messagesRef, (snapshot) => {
+    messagesList.innerHTML = '';  // Clear current list
+    snapshot.forEach((childSnapshot) => {
+      const msg = childSnapshot.val();
+      const li = document.createElement('li');
+      li.textContent = `[${msg.sender}] ${msg.text}`;
+      messagesList.appendChild(li);
+    });
+  });
+
+  // Function to send a new message
+  window.sendMessage = () => {
+    const input = document.getElementById('inputMsg');
+    if (!input.value.trim()) return;
+
+    const newMsgRef = push(messagesRef);
+    set(newMsgRef, {
+      text: input.value,
+      sender: "Anonymous",
+      timestamp: Date.now()
+    });
+    input.value = '';
+  };
+</script>
