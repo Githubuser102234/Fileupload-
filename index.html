@@ -51,6 +51,7 @@
     padding: 0.5rem 1rem;
     font-size: 1rem;
   }
+  /* Mobile responsiveness */
   @media (max-width: 480px) {
     body {
       margin: 0.5rem;
@@ -78,13 +79,11 @@
   <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
   <button id="signUpBtn">Sign Up</button>
   <button id="loginBtn">Log In</button>
-  <button id="googleSignInBtn">Sign In with Google</button>
   <button id="logoutBtn" style="display:none;">Log Out</button>
   <p id="authStatus"></p>
 </div>
 
 <div id="chatArea" style="display:none;">
-  <button id="logoutBtnTop" style="float:right;">Log Out</button>
   <ul id="messagesList"></ul>
   <div id="inputArea">
     <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
@@ -112,10 +111,9 @@
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    signInWithPopup,
-    GoogleAuthProvider
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
 
+  // Your Firebase config - replace with yours!
   const firebaseConfig = {
     apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
     authDomain: "fileupload-3fd69.firebaseapp.com",
@@ -132,6 +130,7 @@
   const db = getDatabase(app);
   const auth = getAuth(app);
 
+  // UI elements
   const authArea = document.getElementById("authArea");
   const chatArea = document.getElementById("chatArea");
   const messagesList = document.getElementById("messagesList");
@@ -142,8 +141,6 @@
   const signUpBtn = document.getElementById("signUpBtn");
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
-  const logoutBtnTop = document.getElementById("logoutBtnTop");
-  const googleSignInBtn = document.getElementById("googleSignInBtn");
   const authStatus = document.getElementById("authStatus");
 
   const messagesRef = ref(db, "messages");
@@ -232,6 +229,7 @@
   function addMessageToList(key, msg) {
     const existing = messagesList.querySelector(`li[data-key="${key}"]`);
     if (existing) {
+      // Update message text if already exists (for edit)
       const contentSpan = existing.querySelector(".msg-content");
       contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${msg.text}`;
       return;
@@ -241,6 +239,7 @@
     messagesList.scrollTop = messagesList.scrollHeight;
   }
 
+  // Listen for new or changed messages
   onChildAdded(messagesRef, (snapshot) => {
     addMessageToList(snapshot.key, snapshot.val());
   });
@@ -295,18 +294,7 @@
       });
   };
 
-  googleSignInBtn.onclick = () => {
-    const provider = new GoogleAuthProvider();
-    signInWithPopup(auth, provider).catch(error => {
-      alert("Google Sign-In failed: " + error.message);
-    });
-  };
-
   logoutBtn.onclick = () => {
-    signOut(auth);
-  };
-
-  logoutBtnTop.onclick = () => {
     signOut(auth);
   };
 
@@ -316,13 +304,11 @@
       authStatus.textContent = `Logged in as ${user.email}`;
       authArea.style.display = "none";
       chatArea.style.display = "block";
-      logoutBtn.style.display = "inline-block";
     } else {
       authStatus.textContent = "Not logged in";
       authArea.style.display = "block";
       chatArea.style.display = "none";
-      logoutBtn.style.display = "none";
-      messagesList.innerHTML = "";
+      messagesList.innerHTML = ""; // Clear messages on logout for simplicity
     }
   });
 </script>
