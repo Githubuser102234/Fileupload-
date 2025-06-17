@@ -3,13 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Firebase Realtime Chat with Edit/Delete</title>
+<title>Firebase Chat with Auth, Edit & Delete</title>
 <style>
   body {
     font-family: Arial, sans-serif;
     max-width: 600px;
     margin: 1rem auto;
     padding: 0 1rem;
+  }
+  #authArea, #chatArea {
+    margin-bottom: 1rem;
   }
   #messagesList {
     list-style: none;
@@ -48,7 +51,6 @@
     padding: 0.5rem 1rem;
     font-size: 1rem;
   }
-
   /* Mobile responsiveness */
   @media (max-width: 480px) {
     body {
@@ -70,13 +72,23 @@
 </head>
 <body>
 
-<h2>Firebase Chat (Edit/Delete Support)</h2>
+<h2>Firebase Chat with Auth, Edit & Delete</h2>
 
-<ul id="messagesList"></ul>
+<div id="authArea">
+  <input id="email" type="email" placeholder="Email" autocomplete="username" />
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+  <button id="signUpBtn">Sign Up</button>
+  <button id="loginBtn">Log In</button>
+  <button id="logoutBtn" style="display:none;">Log Out</button>
+  <p id="authStatus"></p>
+</div>
 
-<div id="inputArea">
-  <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
-  <button id="sendBtn">Send</button>
+<div id="chatArea" style="display:none;">
+  <ul id="messagesList"></ul>
+  <div id="inputArea">
+    <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
+    <button id="sendBtn">Send</button>
+  </div>
 </div>
 
 <script type="module">
@@ -90,9 +102,18 @@
     set,
     update,
     remove,
+    onValue,
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
-  // Firebase config (replace with yours)
+  import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
+
+  // Your Firebase config - replace with yours!
   const firebaseConfig = {
     apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
     authDomain: "fileupload-3fd69.firebaseapp.com",
@@ -104,33 +125,40 @@
     measurementId: "G-WCY0SGWCQX"
   };
 
-  // Initialize Firebase
   const app = initializeApp(firebaseConfig);
   const analytics = getAnalytics(app);
   const db = getDatabase(app);
+  const auth = getAuth(app);
 
-  const messagesRef = ref(db, "messages");
+  // UI elements
+  const authArea = document.getElementById("authArea");
+  const chatArea = document.getElementById("chatArea");
   const messagesList = document.getElementById("messagesList");
   const inputMsg = document.getElementById("inputMsg");
   const sendBtn = document.getElementById("sendBtn");
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const signUpBtn = document.getElementById("signUpBtn");
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const authStatus = document.getElementById("authStatus");
 
-  // Simple anonymous user ID for identifying messages you sent
-  const userId = localStorage.getItem("userId") || crypto.randomUUID();
-  localStorage.setItem("userId", userId);
+  const messagesRef = ref(db, "messages");
+
+  let currentUser = null;
 
   function createMessageElement(key, msg) {
     const li = document.createElement("li");
     li.dataset.key = key;
     const time = new Date(msg.timestamp).toLocaleTimeString();
 
-    let content = document.createElement("span");
-    content.textContent = `[${time}] ${msg.sender}: ${msg.text}`;
-    content.className = "msg-content";
+    const contentSpan = document.createElement("span");
+    contentSpan.className = "msg-content";
+    contentSpan.textContent = `[${time}] ${msg.sender}: ${msg.text}`;
 
-    li.appendChild(content);
+    li.appendChild(contentSpan);
 
-    // If this message belongs to current user, add edit/delete buttons
-    if (msg.userId === userId) {
+    if (msg.uid === currentUser?.uid) {
       li.classList.add("you");
 
       const editBtn = document.createElement("button");
@@ -155,11 +183,9 @@
     input.value = msg.text;
     input.style.width = "70%";
 
-    // Replace content with input field
     li.insertBefore(input, contentSpan);
     li.removeChild(contentSpan);
 
-    // Change buttons temporarily
     const buttons = li.querySelectorAll("button");
     buttons.forEach(b => b.style.display = "none");
 
@@ -200,7 +226,6 @@
     }
   }
 
-  // Add new message to list UI
   function addMessageToList(key, msg) {
     const existing = messagesList.querySelector(`li[data-key="${key}"]`);
     if (existing) {
@@ -218,27 +243,25 @@
   onChildAdded(messagesRef, (snapshot) => {
     addMessageToList(snapshot.key, snapshot.val());
   });
-  // Listen for message changes (edits)
-  onChildAdded(messagesRef, (snapshot) => {
-    snapshot.ref.on('value', (snap) => {
-      if (snap.exists()) addMessageToList(snapshot.key, snap.val());
-      else {
-        // Message deleted: remove from UI
-        const li = messagesList.querySelector(`li[data-key="${snapshot.key}"]`);
-        if (li) li.remove();
-      }
+
+  onValue(messagesRef, (snapshot) => {
+    if (!snapshot.exists()) return;
+    snapshot.forEach(childSnap => {
+      if (childSnap.exists()) addMessageToList(childSnap.key, childSnap.val());
     });
   });
 
   sendBtn.onclick = () => {
     const text = inputMsg.value.trim();
     if (!text) return alert("Message cannot be empty.");
+    if (!currentUser) return alert("You must be logged in to send messages.");
+
     const newMsgRef = push(messagesRef);
     set(newMsgRef, {
       text,
-      sender: "Anonymous",
+      sender: currentUser.email,
       timestamp: Date.now(),
-      userId,
+      uid: currentUser.uid,
     });
     inputMsg.value = "";
     inputMsg.focus();
@@ -246,6 +269,47 @@
 
   inputMsg.addEventListener("keypress", (e) => {
     if (e.key === "Enter") sendBtn.click();
+  });
+
+  signUpBtn.onclick = () => {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) return alert("Email and password required.");
+    createUserWithEmailAndPassword(auth, email, password)
+      .then(() => {
+        authStatus.textContent = "Signed up! You can log in now.";
+      })
+      .catch(error => {
+        alert("Error: " + error.message);
+      });
+  };
+
+  loginBtn.onclick = () => {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) return alert("Email and password required.");
+    signInWithEmailAndPassword(auth, email, password)
+      .catch(error => {
+        alert("Login failed: " + error.message);
+      });
+  };
+
+  logoutBtn.onclick = () => {
+    signOut(auth);
+  };
+
+  onAuthStateChanged(auth, user => {
+    currentUser = user;
+    if (user) {
+      authStatus.textContent = `Logged in as ${user.email}`;
+      authArea.style.display = "none";
+      chatArea.style.display = "block";
+    } else {
+      authStatus.textContent = "Not logged in";
+      authArea.style.display = "block";
+      chatArea.style.display = "none";
+      messagesList.innerHTML = ""; // Clear messages on logout for simplicity
+    }
   });
 </script>
 
