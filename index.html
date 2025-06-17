@@ -51,7 +51,6 @@
     padding: 0.5rem 1rem;
     font-size: 1rem;
   }
-  /* Mobile responsiveness */
   @media (max-width: 480px) {
     body {
       margin: 0.5rem;
@@ -85,6 +84,7 @@
 </div>
 
 <div id="chatArea" style="display:none;">
+  <button id="logoutBtnTop" style="float:right;">Log Out</button>
   <ul id="messagesList"></ul>
   <div id="inputArea">
     <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
@@ -112,8 +112,8 @@
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    GoogleAuthProvider,
     signInWithPopup,
+    GoogleAuthProvider
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -142,10 +142,12 @@
   const signUpBtn = document.getElementById("signUpBtn");
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
+  const logoutBtnTop = document.getElementById("logoutBtnTop");
   const googleSignInBtn = document.getElementById("googleSignInBtn");
   const authStatus = document.getElementById("authStatus");
 
   const messagesRef = ref(db, "messages");
+
   let currentUser = null;
 
   function createMessageElement(key, msg) {
@@ -258,7 +260,7 @@
     const newMsgRef = push(messagesRef);
     set(newMsgRef, {
       text,
-      sender: currentUser.email || currentUser.displayName || "Unknown",
+      sender: currentUser.email,
       timestamp: Date.now(),
       uid: currentUser.uid,
     });
@@ -293,10 +295,6 @@
       });
   };
 
-  logoutBtn.onclick = () => {
-    signOut(auth);
-  };
-
   googleSignInBtn.onclick = () => {
     const provider = new GoogleAuthProvider();
     signInWithPopup(auth, provider).catch(error => {
@@ -304,13 +302,21 @@
     });
   };
 
+  logoutBtn.onclick = () => {
+    signOut(auth);
+  };
+
+  logoutBtnTop.onclick = () => {
+    signOut(auth);
+  };
+
   onAuthStateChanged(auth, user => {
     currentUser = user;
     if (user) {
-      authStatus.textContent = `Logged in as ${user.email || user.displayName}`;
+      authStatus.textContent = `Logged in as ${user.email}`;
       authArea.style.display = "none";
       chatArea.style.display = "block";
-      logoutBtn.style.display = "inline";
+      logoutBtn.style.display = "inline-block";
     } else {
       authStatus.textContent = "Not logged in";
       authArea.style.display = "block";
