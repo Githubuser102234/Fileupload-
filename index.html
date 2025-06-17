@@ -79,12 +79,12 @@
   <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
   <button id="signUpBtn">Sign Up</button>
   <button id="loginBtn">Log In</button>
+  <button id="googleSignInBtn">Sign In with Google</button>
   <button id="logoutBtn" style="display:none;">Log Out</button>
   <p id="authStatus"></p>
 </div>
 
 <div id="chatArea" style="display:none;">
-  <button id="logoutBtnTop" style="float:right;">Log Out</button>
   <ul id="messagesList"></ul>
   <div id="inputArea">
     <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
@@ -112,6 +112,8 @@
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
+    GoogleAuthProvider,
+    signInWithPopup,
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
 
   const firebaseConfig = {
@@ -140,11 +142,10 @@
   const signUpBtn = document.getElementById("signUpBtn");
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
-  const logoutBtnTop = document.getElementById("logoutBtnTop");
+  const googleSignInBtn = document.getElementById("googleSignInBtn");
   const authStatus = document.getElementById("authStatus");
 
   const messagesRef = ref(db, "messages");
-
   let currentUser = null;
 
   function createMessageElement(key, msg) {
@@ -257,7 +258,7 @@
     const newMsgRef = push(messagesRef);
     set(newMsgRef, {
       text,
-      sender: currentUser.email,
+      sender: currentUser.email || currentUser.displayName || "Unknown",
       timestamp: Date.now(),
       uid: currentUser.uid,
     });
@@ -296,17 +297,20 @@
     signOut(auth);
   };
 
-  logoutBtnTop.onclick = () => {
-    signOut(auth);
+  googleSignInBtn.onclick = () => {
+    const provider = new GoogleAuthProvider();
+    signInWithPopup(auth, provider).catch(error => {
+      alert("Google Sign-In failed: " + error.message);
+    });
   };
 
   onAuthStateChanged(auth, user => {
     currentUser = user;
     if (user) {
-      authStatus.textContent = `Logged in as ${user.email}`;
+      authStatus.textContent = `Logged in as ${user.email || user.displayName}`;
       authArea.style.display = "none";
       chatArea.style.display = "block";
-      logoutBtn.style.display = "inline-block";
+      logoutBtn.style.display = "inline";
     } else {
       authStatus.textContent = "Not logged in";
       authArea.style.display = "block";
