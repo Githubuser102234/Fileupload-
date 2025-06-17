@@ -1,78 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Firebase Realtime Chat</title>
-  <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 2rem auto; }
-    #messagesList { list-style: none; padding: 0; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; margin-bottom: 1rem; }
-    #messagesList li { padding: 0.5rem; border-bottom: 1px solid #eee; }
-    #inputMsg { width: 80%; padding: 0.5rem; }
-    button { padding: 0.5rem 1rem; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Firebase Realtime Chat with Edit/Delete</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 600px;
+    margin: 1rem auto;
+    padding: 0 1rem;
+  }
+  #messagesList {
+    list-style: none;
+    padding: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    margin-bottom: 1rem;
+  }
+  #messagesList li {
+    padding: 0.5rem;
+    border-bottom: 1px solid #eee;
+    position: relative;
+  }
+  #messagesList li.you {
+    background: #e0f7fa;
+  }
+  #messagesList li button {
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #007BFF;
+  }
+  #inputArea {
+    display: flex;
+    gap: 0.5rem;
+  }
+  #inputMsg {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  button#sendBtn {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+
+  /* Mobile responsiveness */
+  @media (max-width: 480px) {
+    body {
+      margin: 0.5rem;
+      max-width: 100%;
+      padding: 0 0.5rem;
+    }
+    #inputArea {
+      flex-direction: column;
+    }
+    #inputMsg {
+      width: 100%;
+    }
+    button#sendBtn {
+      width: 100%;
+    }
+  }
+</style>
 </head>
 <body>
 
-  <h2>Firebase Realtime Chat</h2>
+<h2>Firebase Chat (Edit/Delete Support)</h2>
 
-  <ul id="messagesList"></ul>
+<ul id="messagesList"></ul>
 
+<div id="inputArea">
   <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
   <button id="sendBtn">Send</button>
+</div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-    import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-analytics.js";
-    import { getDatabase, ref, onChildAdded, push, set } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-analytics.js";
+  import {
+    getDatabase,
+    ref,
+    onChildAdded,
+    push,
+    set,
+    update,
+    remove,
+  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
-      authDomain: "fileupload-3fd69.firebaseapp.com",
-      databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",  // ← Add your Realtime Database URL here!
-      projectId: "fileupload-3fd69",
-      storageBucket: "fileupload-3fd69.appspot.com",
-      messagingSenderId: "1048191531078",
-      appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
-      measurementId: "G-WCY0SGWCQX"
-    };
+  // Firebase config (replace with yours)
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
+    authDomain: "fileupload-3fd69.firebaseapp.com",
+    databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",
+    projectId: "fileupload-3fd69",
+    storageBucket: "fileupload-3fd69.appspot.com",
+    messagingSenderId: "1048191531078",
+    appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
+    measurementId: "G-WCY0SGWCQX"
+  };
 
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    const analytics = getAnalytics(app);
-    const db = getDatabase(app);
+  // Initialize Firebase
+  const app = initializeApp(firebaseConfig);
+  const analytics = getAnalytics(app);
+  const db = getDatabase(app);
 
-    const messagesRef = ref(db, 'messages');
-    const messagesList = document.getElementById('messagesList');
-    const inputMsg = document.getElementById('inputMsg');
-    const sendBtn = document.getElementById('sendBtn');
+  const messagesRef = ref(db, "messages");
+  const messagesList = document.getElementById("messagesList");
+  const inputMsg = document.getElementById("inputMsg");
+  const sendBtn = document.getElementById("sendBtn");
 
-    onChildAdded(messagesRef, (snapshot) => {
-      const msg = snapshot.val();
-      const li = document.createElement('li');
-      const time = new Date(msg.timestamp).toLocaleTimeString();
-      li.textContent = `[${time}] ${msg.sender}: ${msg.text}`;
-      messagesList.appendChild(li);
-      messagesList.scrollTop = messagesList.scrollHeight;
-    });
+  // Simple anonymous user ID for identifying messages you sent
+  const userId = localStorage.getItem("userId") || crypto.randomUUID();
+  localStorage.setItem("userId", userId);
 
-    function sendMessage() {
-      const text = inputMsg.value.trim();
-      if (!text) return;
-      const newMsgRef = push(messagesRef);
-      set(newMsgRef, {
-        text,
-        sender: "Anonymous",
-        timestamp: Date.now()
-      });
-      inputMsg.value = '';
-      inputMsg.focus();
+  function createMessageElement(key, msg) {
+    const li = document.createElement("li");
+    li.dataset.key = key;
+    const time = new Date(msg.timestamp).toLocaleTimeString();
+
+    let content = document.createElement("span");
+    content.textContent = `[${time}] ${msg.sender}: ${msg.text}`;
+    content.className = "msg-content";
+
+    li.appendChild(content);
+
+    // If this message belongs to current user, add edit/delete buttons
+    if (msg.userId === userId) {
+      li.classList.add("you");
+
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "Edit";
+      editBtn.onclick = () => startEditMessage(li, key, msg);
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "Delete";
+      delBtn.onclick = () => deleteMessage(key);
+
+      li.appendChild(editBtn);
+      li.appendChild(delBtn);
     }
 
-    sendBtn.addEventListener('click', sendMessage);
-    inputMsg.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter') sendMessage();
+    return li;
+  }
+
+  function startEditMessage(li, key, msg) {
+    const contentSpan = li.querySelector(".msg-content");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = msg.text;
+    input.style.width = "70%";
+
+    // Replace content with input field
+    li.insertBefore(input, contentSpan);
+    li.removeChild(contentSpan);
+
+    // Change buttons temporarily
+    const buttons = li.querySelectorAll("button");
+    buttons.forEach(b => b.style.display = "none");
+
+    const saveBtn = document.createElement("button");
+    saveBtn.textContent = "Save";
+    saveBtn.onclick = () => {
+      const newText = input.value.trim();
+      if (!newText) {
+        alert("Message cannot be empty.");
+        return;
+      }
+      update(ref(db, "messages/" + key), { text: newText })
+        .then(() => {
+          li.replaceChild(contentSpan, input);
+          contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${newText}`;
+          buttons.forEach(b => b.style.display = "");
+          li.removeChild(saveBtn);
+          li.removeChild(cancelBtn);
+        });
+    };
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.onclick = () => {
+      li.replaceChild(contentSpan, input);
+      buttons.forEach(b => b.style.display = "");
+      li.removeChild(saveBtn);
+      li.removeChild(cancelBtn);
+    };
+
+    li.appendChild(saveBtn);
+    li.appendChild(cancelBtn);
+  }
+
+  function deleteMessage(key) {
+    if (confirm("Are you sure you want to delete this message?")) {
+      remove(ref(db, "messages/" + key));
+    }
+  }
+
+  // Add new message to list UI
+  function addMessageToList(key, msg) {
+    const existing = messagesList.querySelector(`li[data-key="${key}"]`);
+    if (existing) {
+      // Update message text if already exists (for edit)
+      const contentSpan = existing.querySelector(".msg-content");
+      contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${msg.text}`;
+      return;
+    }
+    const li = createMessageElement(key, msg);
+    messagesList.appendChild(li);
+    messagesList.scrollTop = messagesList.scrollHeight;
+  }
+
+  // Listen for new or changed messages
+  onChildAdded(messagesRef, (snapshot) => {
+    addMessageToList(snapshot.key, snapshot.val());
+  });
+  // Listen for message changes (edits)
+  onChildAdded(messagesRef, (snapshot) => {
+    snapshot.ref.on('value', (snap) => {
+      if (snap.exists()) addMessageToList(snapshot.key, snap.val());
+      else {
+        // Message deleted: remove from UI
+        const li = messagesList.querySelector(`li[data-key="${snapshot.key}"]`);
+        if (li) li.remove();
+      }
     });
-  </script>
+  });
+
+  sendBtn.onclick = () => {
+    const text = inputMsg.value.trim();
+    if (!text) return alert("Message cannot be empty.");
+    const newMsgRef = push(messagesRef);
+    set(newMsgRef, {
+      text,
+      sender: "Anonymous",
+      timestamp: Date.now(),
+      userId,
+    });
+    inputMsg.value = "";
+    inputMsg.focus();
+  };
+
+  inputMsg.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") sendBtn.click();
+  });
+</script>
 
 </body>
 </html>
