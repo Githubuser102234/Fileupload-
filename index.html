@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Firebase Chat with Auth, Edit, Delete & Ban</title>
+<title>Firebase Chat with Auth, Edit & Delete</title>
 <style>
   body {
     font-family: Arial, sans-serif;
@@ -51,10 +51,6 @@
     padding: 0.5rem 1rem;
     font-size: 1rem;
   }
-  #banNotice {
-    color: red;
-    margin-bottom: 1rem;
-  }
   /* Mobile responsiveness */
   @media (max-width: 480px) {
     body {
@@ -76,7 +72,7 @@
 </head>
 <body>
 
-<h2>Firebase Chat with Auth, Edit, Delete & Ban</h2>
+<h2>Firebase Chat with Auth, Edit & Delete</h2>
 
 <div id="authArea">
   <input id="email" type="email" placeholder="Email" autocomplete="username" />
@@ -88,7 +84,6 @@
 </div>
 
 <div id="chatArea" style="display:none;">
-  <p id="banNotice" style="display:none;"></p>
   <ul id="messagesList"></ul>
   <div id="inputArea">
     <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
@@ -108,7 +103,6 @@
     update,
     remove,
     onValue,
-    get
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
 
   import {
@@ -117,7 +111,6 @@
     signInWithEmailAndPassword,
     signOut,
     onAuthStateChanged,
-    sendPasswordResetEmail
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
 
   // Your Firebase config - replace with yours!
@@ -149,12 +142,10 @@
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
   const authStatus = document.getElementById("authStatus");
-  const banNotice = document.getElementById("banNotice");
 
   const messagesRef = ref(db, "messages");
 
   let currentUser = null;
-  let currentUserBan = null; // store ban info if banned
 
   function createMessageElement(key, msg) {
     const li = document.createElement("li");
@@ -260,45 +251,13 @@
     });
   });
 
-  // Check if user is banned, returns ban data or null
-  async function checkBan(uid) {
-    const banRef = ref(db, `bans/${uid}`);
-    const snapshot = await get(banRef);
-    if (!snapshot.exists()) return null;
-
-    const banData = snapshot.val();
-    const now = Date.now();
-    const banEnd = banData.bannedAt + banData.duration * 24 * 60 * 60 * 1000;
-
-    if (now > banEnd) {
-      // Ban expired, remove ban
-      await remove(banRef);
-      return null;
-    }
-    return banData;
-  }
-
-  sendBtn.onclick = async () => {
-    if (!currentUser) return alert("You must be logged in.");
-
-    const banData = await checkBan(currentUser.uid);
-    if (banData) {
-      const now = Date.now();
-      const banEnd = banData.bannedAt + banData.duration * 24 * 60 * 60 * 1000;
-      const remainingMs = banEnd - now;
-      const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
-      alert(`You are banned for ${remainingDays} more day(s).\nReason: ${banData.reason}`);
-      return;
-    }
-
+  sendBtn.onclick = () => {
     const text = inputMsg.value.trim();
-    if (!text) {
-      alert("Message cannot be empty.");
-      return;
-    }
+    if (!text) return alert("Message cannot be empty.");
+    if (!currentUser) return alert("You must be logged in to send messages.");
 
     const newMsgRef = push(messagesRef);
-    await set(newMsgRef, {
+    set(newMsgRef, {
       text,
       sender: currentUser.email,
       timestamp: Date.now(),
@@ -308,73 +267,48 @@
     inputMsg.focus();
   };
 
-  // Auth events
+  inputMsg.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") sendBtn.click();
+  });
+
   signUpBtn.onclick = () => {
     const email = emailInput.value.trim();
-    const password = passwordInput.value.trim();
-    if (!email || !password) {
-      alert("Email and password are required");
-      return;
-    }
+    const password = passwordInput.value;
+    if (!email || !password) return alert("Email and password required.");
     createUserWithEmailAndPassword(auth, email, password)
       .then(() => {
-        authStatus.textContent = "Sign up successful, you can log in now.";
+        authStatus.textContent = "Signed up! You can log in now.";
       })
-      .catch(e => alert(e.message));
+      .catch(error => {
+        alert("Error: " + error.message);
+      });
   };
 
   loginBtn.onclick = () => {
     const email = emailInput.value.trim();
-    const password = passwordInput.value.trim();
-    if (!email || !password) {
-      alert("Email and password are required");
-      return;
-    }
+    const password = passwordInput.value;
+    if (!email || !password) return alert("Email and password required.");
     signInWithEmailAndPassword(auth, email, password)
-      .catch(e => alert(e.message));
+      .catch(error => {
+        alert("Login failed: " + error.message);
+      });
   };
 
   logoutBtn.onclick = () => {
     signOut(auth);
   };
 
-  // On auth state changed
-  onAuthStateChanged(auth, async (user) => {
+  onAuthStateChanged(auth, user => {
     currentUser = user;
     if (user) {
       authStatus.textContent = `Logged in as ${user.email}`;
       authArea.style.display = "none";
       chatArea.style.display = "block";
-
-      // Check ban on login & show banNotice
-      const banData = await checkBan(user.uid);
-      if (banData) {
-        currentUserBan = banData;
-        const now = Date.now();
-        const banEnd = banData.bannedAt + banData.duration * 24 * 60 * 60 * 1000;
-        const remainingMs = banEnd - now;
-        const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
-        banNotice.textContent = `You are banned for ${remainingDays} day(s). Reason: ${banData.reason}`;
-        banNotice.style.display = "block";
-      } else {
-        currentUserBan = null;
-        banNotice.style.display = "none";
-        banNotice.textContent = "";
-      }
-
-      logoutBtn.style.display = "inline-block";
-      signUpBtn.style.display = "none";
-      loginBtn.style.display = "none";
     } else {
       authStatus.textContent = "Not logged in";
       authArea.style.display = "block";
       chatArea.style.display = "none";
-      logoutBtn.style.display = "none";
-      signUpBtn.style.display = "inline-block";
-      loginBtn.style.display = "inline-block";
-      currentUserBan = null;
-      banNotice.style.display = "none";
-      banNotice.textContent = "";
+      messagesList.innerHTML = ""; // Clear messages on logout for simplicity
     }
   });
 </script>
