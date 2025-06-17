@@ -1,84 +1,81 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Firebase Chat with Auth, Edit & Delete</title>
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    max-width: 600px;
-    margin: 1rem auto;
-    padding: 0 1rem;
-  }
-  #authArea, #chatArea {
-    margin-bottom: 1rem;
-  }
-  #messagesList {
-    list-style: none;
-    padding: 0;
-    max-height: 60vh;
-    overflow-y: auto;
-    border: 1px solid #ddd;
-    margin-bottom: 1rem;
-  }
-  #messagesList li {
-    padding: 0.5rem;
-    border-bottom: 1px solid #eee;
-    position: relative;
-  }
-  #messagesList li.you {
-    background: #e0f7fa;
-  }
-  #messagesList li button {
-    font-size: 0.75rem;
-    margin-left: 0.5rem;
-    cursor: pointer;
-    background: none;
-    border: none;
-    color: #007BFF;
-  }
-  #inputArea {
-    display: flex;
-    gap: 0.5rem;
-  }
-  #inputMsg {
-    flex: 1;
-    padding: 0.5rem;
-    font-size: 1rem;
-  }
-  button#sendBtn {
-    padding: 0.5rem 1rem;
-    font-size: 1rem;
-  }
-  /* Mobile responsiveness */
-  @media (max-width: 480px) {
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Firebase Chat</title>
+  <style>
     body {
-      margin: 0.5rem;
-      max-width: 100%;
-      padding: 0 0.5rem;
+      font-family: Arial, sans-serif;
+      max-width: 600px;
+      margin: 1rem auto;
+      padding: 0 1rem;
+    }
+    #authArea, #chatArea {
+      margin-bottom: 1rem;
+    }
+    #messagesList {
+      list-style: none;
+      padding: 0;
+      max-height: 60vh;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      margin-bottom: 1rem;
+    }
+    #messagesList li {
+      padding: 0.5rem;
+      border-bottom: 1px solid #eee;
+      position: relative;
+    }
+    #messagesList li.you {
+      background: #e0f7fa;
+    }
+    #messagesList li button {
+      font-size: 0.75rem;
+      margin-left: 0.5rem;
+      cursor: pointer;
+      background: none;
+      border: none;
+      color: #007BFF;
     }
     #inputArea {
-      flex-direction: column;
+      display: flex;
+      gap: 0.5rem;
     }
     #inputMsg {
-      width: 100%;
+      flex: 1;
+      padding: 0.5rem;
+      font-size: 1rem;
     }
     button#sendBtn {
-      width: 100%;
+      padding: 0.5rem 1rem;
+      font-size: 1rem;
     }
-  }
-</style>
+    @media (max-width: 480px) {
+      body {
+        margin: 0.5rem;
+        max-width: 100%;
+        padding: 0 0.5rem;
+      }
+      #inputArea {
+        flex-direction: column;
+      }
+      #inputMsg, #sendBtn {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
 
-<h2>Firebase Chat with Auth, Edit & Delete</h2>
+<h2>Firebase Chat</h2>
 
 <div id="authArea">
   <input id="email" type="email" placeholder="Email" autocomplete="username" />
   <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
   <button id="signUpBtn">Sign Up</button>
   <button id="loginBtn">Log In</button>
+  <button id="resetBtn">Reset Password</button>
   <button id="logoutBtn" style="display:none;">Log Out</button>
   <p id="authStatus"></p>
 </div>
@@ -93,27 +90,9 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-  import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-analytics.js";
-  import {
-    getDatabase,
-    ref,
-    onChildAdded,
-    push,
-    set,
-    update,
-    remove,
-    onValue,
-  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+  import { getDatabase, ref, onChildAdded, push, set, update, remove, get } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
 
-  import {
-    getAuth,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged,
-  } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-
-  // Your Firebase config - replace with yours!
   const firebaseConfig = {
     apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
     authDomain: "fileupload-3fd69.firebaseapp.com",
@@ -126,11 +105,12 @@
   };
 
   const app = initializeApp(firebaseConfig);
-  const analytics = getAnalytics(app);
   const db = getDatabase(app);
   const auth = getAuth(app);
 
-  // UI elements
+  const messagesRef = ref(db, "messages");
+  const bansRef = ref(db, "bans");
+
   const authArea = document.getElementById("authArea");
   const chatArea = document.getElementById("chatArea");
   const messagesList = document.getElementById("messagesList");
@@ -140,12 +120,13 @@
   const passwordInput = document.getElementById("password");
   const signUpBtn = document.getElementById("signUpBtn");
   const loginBtn = document.getElementById("loginBtn");
+  const resetBtn = document.getElementById("resetBtn");
   const logoutBtn = document.getElementById("logoutBtn");
   const authStatus = document.getElementById("authStatus");
 
-  const messagesRef = ref(db, "messages");
-
   let currentUser = null;
+  let isBanned = false;
+  let banUntil = 0;
 
   function createMessageElement(key, msg) {
     const li = document.createElement("li");
@@ -155,7 +136,6 @@
     const contentSpan = document.createElement("span");
     contentSpan.className = "msg-content";
     contentSpan.textContent = `[${time}] ${msg.sender}: ${msg.text}`;
-
     li.appendChild(contentSpan);
 
     if (msg.uid === currentUser?.uid) {
@@ -167,7 +147,7 @@
 
       const delBtn = document.createElement("button");
       delBtn.textContent = "Delete";
-      delBtn.onclick = () => deleteMessage(key);
+      delBtn.onclick = () => remove(ref(db, "messages/" + key));
 
       li.appendChild(editBtn);
       li.appendChild(delBtn);
@@ -185,33 +165,27 @@
 
     li.insertBefore(input, contentSpan);
     li.removeChild(contentSpan);
-
-    const buttons = li.querySelectorAll("button");
-    buttons.forEach(b => b.style.display = "none");
+    li.querySelectorAll("button").forEach(btn => btn.style.display = "none");
 
     const saveBtn = document.createElement("button");
     saveBtn.textContent = "Save";
     saveBtn.onclick = () => {
       const newText = input.value.trim();
-      if (!newText) {
-        alert("Message cannot be empty.");
-        return;
-      }
-      update(ref(db, "messages/" + key), { text: newText })
-        .then(() => {
-          li.replaceChild(contentSpan, input);
-          contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${newText}`;
-          buttons.forEach(b => b.style.display = "");
-          li.removeChild(saveBtn);
-          li.removeChild(cancelBtn);
-        });
+      if (!newText) return alert("Message cannot be empty.");
+      update(ref(db, "messages/" + key), { text: newText }).then(() => {
+        li.replaceChild(contentSpan, input);
+        contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${newText}`;
+        li.querySelectorAll("button").forEach(btn => btn.style.display = "");
+        li.removeChild(saveBtn);
+        li.removeChild(cancelBtn);
+      });
     };
 
     const cancelBtn = document.createElement("button");
     cancelBtn.textContent = "Cancel";
     cancelBtn.onclick = () => {
       li.replaceChild(contentSpan, input);
-      buttons.forEach(b => b.style.display = "");
+      li.querySelectorAll("button").forEach(btn => btn.style.display = "");
       li.removeChild(saveBtn);
       li.removeChild(cancelBtn);
     };
@@ -220,18 +194,11 @@
     li.appendChild(cancelBtn);
   }
 
-  function deleteMessage(key) {
-    if (confirm("Are you sure you want to delete this message?")) {
-      remove(ref(db, "messages/" + key));
-    }
-  }
-
   function addMessageToList(key, msg) {
     const existing = messagesList.querySelector(`li[data-key="${key}"]`);
     if (existing) {
-      // Update message text if already exists (for edit)
-      const contentSpan = existing.querySelector(".msg-content");
-      contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${msg.text}`;
+      existing.querySelector(".msg-content").textContent =
+        `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${msg.text}`;
       return;
     }
     const li = createMessageElement(key, msg);
@@ -239,22 +206,18 @@
     messagesList.scrollTop = messagesList.scrollHeight;
   }
 
-  // Listen for new or changed messages
-  onChildAdded(messagesRef, (snapshot) => {
+  onChildAdded(messagesRef, snapshot => {
     addMessageToList(snapshot.key, snapshot.val());
-  });
-
-  onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) return;
-    snapshot.forEach(childSnap => {
-      if (childSnap.exists()) addMessageToList(childSnap.key, childSnap.val());
-    });
   });
 
   sendBtn.onclick = () => {
     const text = inputMsg.value.trim();
-    if (!text) return alert("Message cannot be empty.");
-    if (!currentUser) return alert("You must be logged in to send messages.");
+    if (!text || !currentUser) return;
+
+    if (isBanned && Date.now() < banUntil) {
+      const daysLeft = Math.ceil((banUntil - Date.now()) / (1000 * 60 * 60 * 24));
+      return alert(`You are banned for ${daysLeft} more day(s).`);
+    }
 
     const newMsgRef = push(messagesRef);
     set(newMsgRef, {
@@ -264,10 +227,9 @@
       uid: currentUser.uid,
     });
     inputMsg.value = "";
-    inputMsg.focus();
   };
 
-  inputMsg.addEventListener("keypress", (e) => {
+  inputMsg.addEventListener("keypress", e => {
     if (e.key === "Enter") sendBtn.click();
   });
 
@@ -276,39 +238,46 @@
     const password = passwordInput.value;
     if (!email || !password) return alert("Email and password required.");
     createUserWithEmailAndPassword(auth, email, password)
-      .then(() => {
-        authStatus.textContent = "Signed up! You can log in now.";
-      })
-      .catch(error => {
-        alert("Error: " + error.message);
-      });
+      .then(() => alert("Signed up. You can now log in."))
+      .catch(error => alert("Error: " + error.message));
   };
 
   loginBtn.onclick = () => {
     const email = emailInput.value.trim();
     const password = passwordInput.value;
-    if (!email || !password) return alert("Email and password required.");
-    signInWithEmailAndPassword(auth, email, password)
-      .catch(error => {
-        alert("Login failed: " + error.message);
-      });
+    signInWithEmailAndPassword(auth, email, password).catch(err => alert(err.message));
   };
 
-  logoutBtn.onclick = () => {
-    signOut(auth);
+  resetBtn.onclick = () => {
+    const email = emailInput.value.trim();
+    if (!email) return alert("Enter your email.");
+    sendPasswordResetEmail(auth, email).then(() => alert("Reset link sent."));
   };
 
-  onAuthStateChanged(auth, user => {
+  logoutBtn.onclick = () => signOut(auth);
+
+  onAuthStateChanged(auth, async user => {
     currentUser = user;
     if (user) {
       authStatus.textContent = `Logged in as ${user.email}`;
       authArea.style.display = "none";
       chatArea.style.display = "block";
+      logoutBtn.style.display = "inline";
+
+      const banSnap = await get(ref(db, `bans/${user.uid}`));
+      if (banSnap.exists()) {
+        const banData = banSnap.val();
+        if (banData.until && Date.now() < banData.until) {
+          isBanned = true;
+          banUntil = banData.until;
+        }
+      }
     } else {
       authStatus.textContent = "Not logged in";
       authArea.style.display = "block";
       chatArea.style.display = "none";
-      messagesList.innerHTML = ""; // Clear messages on logout for simplicity
+      messagesList.innerHTML = "";
+      isBanned = false;
     }
   });
 </script>
