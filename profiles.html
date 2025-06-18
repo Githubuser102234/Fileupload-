@@ -8,145 +8,156 @@
   body {
     font-family: Arial, sans-serif;
     max-width: 600px;
-    margin: 2rem auto;
-    padding: 1rem;
+    margin: 20px auto;
+    padding: 10px;
   }
-  #profile-picture {
-    width: 150px;
-    height: 150px;
-    background-color: #ddd;
+  #profilePic {
+    width: 120px;
+    height: 120px;
     border-radius: 50%;
+    background-color: #ccc;
     object-fit: cover;
   }
-  #edit-button {
-    margin-top: 1rem;
-    padding: 0.5rem 1rem;
-    font-size: 1rem;
+  #editBtn {
+    margin-top: 15px;
+    padding: 8px 15px;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  #loading, #errorMsg {
+    font-weight: bold;
+    margin-top: 20px;
+  }
+  .field-label {
+    font-weight: bold;
+    margin-top: 10px;
   }
 </style>
 </head>
 <body>
-  <h1>User Profile</h1>
-  <img id="profile-picture" src="" alt="Profile Picture" />
-  <h2 id="nickname">Loading...</h2>
-  <p><strong>Username:</strong> <span id="username">Loading...</span></p>
-  <p><strong>Bio:</strong> <span id="bio">Loading...</span></p>
-  <button id="edit-button" style="display:none;">Edit Profile</button>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
-    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-database.js";
-    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-auth.js";
+<h1>User Profile</h1>
+<div id="loading">Loading profile...</div>
+<div id="errorMsg" style="color: red;"></div>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
-      authDomain: "fileupload-3fd69.firebaseapp.com",
-      databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",
-      projectId: "fileupload-3fd69",
-      storageBucket: "fileupload-3fd69.appspot.com",
-      messagingSenderId: "1048191531078",
-      appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
-      measurementId: "G-WCY0SGWCQX"
-    };
+<img id="profilePic" src="" alt="Profile Picture" style="display:none;" />
+<div><span class="field-label">Username:</span> <span id="username"></span></div>
+<div><span class="field-label">Nickname:</span> <span id="nickname"></span></div>
+<div><span class="field-label">Bio:</span></div>
+<p id="bio" style="white-space: pre-wrap;"></p>
 
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
-    const auth = getAuth(app);
+<button id="editBtn" style="display:none;">Edit Profile</button>
 
-    const nicknameEl = document.getElementById("nickname");
-    const usernameEl = document.getElementById("username");
-    const bioEl = document.getElementById("bio");
-    const profilePictureEl = document.getElementById("profile-picture");
-    const editButton = document.getElementById("edit-button");
+<script type="module">
+// Import Firebase modules (ensure you include these scripts in your real deployment or use a bundler)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-auth.js";
 
-    // Get username from URL hash
-    let usernameHash = location.hash.slice(1);
-    console.log("Username from URL hash:", usernameHash);
+// Your Firebase config here
+const firebaseConfig = {
+  apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
+  authDomain: "fileupload-3fd69.firebaseapp.com",
+  databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",
+  projectId: "fileupload-3fd69",
+  storageBucket: "fileupload-3fd69.appspot.com",
+  messagingSenderId: "1048191531078",
+  appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
+  measurementId: "G-WCY0SGWCQX"
+};
 
-    if (!usernameHash) {
-      nicknameEl.textContent = "No username specified in URL.";
-      usernameEl.textContent = "-";
-      bioEl.textContent = "-";
-      profilePictureEl.style.display = "none";
-      throw new Error("No username hash found in URL");
-    }
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
 
-    // Helper function to show errors
-    function showError(msg) {
-      nicknameEl.textContent = "Error loading profile";
-      usernameEl.textContent = "-";
-      bioEl.textContent = msg;
-      profilePictureEl.style.display = "none";
-    }
+const loadingEl = document.getElementById("loading");
+const errorEl = document.getElementById("errorMsg");
+const usernameEl = document.getElementById("username");
+const nicknameEl = document.getElementById("nickname");
+const bioEl = document.getElementById("bio");
+const profilePicEl = document.getElementById("profilePic");
+const editBtn = document.getElementById("editBtn");
 
-    // Listen for auth state to get current user UID
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log("Logged in as UID:", user.uid);
-        loadUidFromUsername(usernameHash, user.uid);
-      } else {
-        console.warn("User not logged in. Reading profile may fail.");
-        // Still attempt to load profile even if not logged in, for testing
-        loadUidFromUsername(usernameHash, null);
-      }
-    });
+const profileUsername = window.location.hash.slice(1);
+if (!profileUsername) {
+  loadingEl.textContent = "No username provided in URL.";
+} else {
+  // Track current logged-in user's UID and username (we assume you store username in profile or auth)
+  let currentUserUid = null;
+  let currentUserName = null;
 
-    async function loadUidFromUsername(username, currentUserUid) {
-      try {
-        const usernameRef = ref(db, `usernames/${username}`);
-        const snapshot = await get(usernameRef);
-        if (!snapshot.exists()) {
-          console.error(`Username "${username}" not found in database.`);
-          showError("(user not found)");
-          return;
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      currentUserUid = user.uid;
+      // Fetch current user's username from profiles path
+      const userProfileRef = ref(db, "profiles/" + user.displayName || user.uid);
+      onValue(userProfileRef, (snap) => {
+        if (snap.exists()) {
+          currentUserName = snap.val().username || user.displayName || null;
+          // Now load the requested profile data
+          loadProfile(profileUsername);
+        } else {
+          // If no profile found for logged in user, still load target profile
+          loadProfile(profileUsername);
         }
-        const uid = snapshot.val();
-        console.log(`Found UID for username "${username}":`, uid);
-        loadProfile(uid, currentUserUid, username);
-      } catch (error) {
-        console.error("Failed to fetch username data:", error);
-        showError("Failed to load user data");
-      }
+      }, (err) => {
+        console.error("Error fetching current user profile:", err);
+        loadProfile(profileUsername);
+      });
+    } else {
+      // Not logged in, just load profile
+      loadProfile(profileUsername);
     }
+  });
 
-    async function loadProfile(uid, currentUserUid, username) {
-      try {
-        const profileRef = ref(db, `profiles/${uid}`);
-        const snapshot = await get(profileRef);
-        if (!snapshot.exists()) {
-          console.warn(`Profile not found for UID: ${uid}`);
-          nicknameEl.textContent = "(not set)";
-          usernameEl.textContent = username;
-          bioEl.textContent = "(not set)";
-          profilePictureEl.style.display = "none";
-          return;
-        }
-        const profileData = snapshot.val();
-        console.log("Profile data:", profileData);
+  function loadProfile(username) {
+    const profileRef = ref(db, "profiles/" + username);
+    onValue(profileRef, (snapshot) => {
+      loadingEl.style.display = "none";
+      errorEl.textContent = "";
+      if (snapshot.exists()) {
+        const profile = snapshot.val();
 
-        nicknameEl.textContent = profileData.nickname || "(not set)";
         usernameEl.textContent = username;
-        bioEl.textContent = profileData.bio || "(not set)";
-        if (profileData.profilePictureUrl) {
-          profilePictureEl.src = profileData.profilePictureUrl;
-          profilePictureEl.style.display = "block";
+        nicknameEl.textContent = profile.nickname || "(No nickname set)";
+        bioEl.textContent = profile.bio || "(No bio set)";
+
+        if (profile.profilePictureUrl) {
+          profilePicEl.src = profile.profilePictureUrl;
+          profilePicEl.style.display = "block";
         } else {
-          profilePictureEl.style.display = "none";
+          profilePicEl.style.display = "none";
         }
 
-        if (currentUserUid === uid) {
-          editButton.style.display = "inline-block";
-          editButton.onclick = () => {
-            location.href = `/edit-profile.html#${username}`;
-          };
+        // Show Edit button only if this is the logged-in user's profile
+        if (currentUserUid && username === currentUserName) {
+          editBtn.style.display = "inline-block";
         } else {
-          editButton.style.display = "none";
+          editBtn.style.display = "none";
         }
-      } catch (error) {
-        console.error("Failed to fetch profile data:", error);
-        showError("Failed to load profile");
+      } else {
+        errorEl.textContent = "Profile not found.";
+        usernameEl.textContent = "";
+        nicknameEl.textContent = "";
+        bioEl.textContent = "";
+        profilePicEl.style.display = "none";
+        editBtn.style.display = "none";
       }
-    }
-  </script>
+    }, (error) => {
+      loadingEl.style.display = "none";
+      console.error("Firebase read error:", error);
+      errorEl.textContent = "Error loading profile: " + error.message;
+    });
+  }
+}
+
+// Edit button click handler (redirect to your edit profile page or open modal)
+editBtn.addEventListener("click", () => {
+  // Replace with your real edit profile page URL or modal logic
+  alert("Edit profile feature coming soon!");
+});
+</script>
+
 </body>
 </html>
