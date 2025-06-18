@@ -61,8 +61,8 @@
 <body>
   <div class="profile-container" id="profileContent">
     <img id="profilePic" class="profile-pic" src="" alt="Profile Picture">
-    <button id="changePicBtn" style="display: none;">Change Picture</button>
     <input type="file" id="fileInput" accept="image/*" />
+    <button id="changePicBtn" style="display: none; margin-top: 10px;">Change Picture</button>
 
     <h2 id="nicknameText">Loading...</h2>
     <input type="text" id="nicknameInput" class="edit-field" style="display:none;" />
@@ -72,14 +72,14 @@
     <p id="bioText">Loading...</p>
     <textarea id="bioInput" class="edit-field" rows="3" style="display:none;"></textarea>
 
-    <button id="editProfileBtn" style="display:none;">Edit Profile</button>
-    <button id="saveBtn" style="display:none;">Save</button>
-    <button id="cancelBtn" style="display:none;">Cancel</button>
+    <button id="editProfileBtn" style="display: none;">Edit Profile</button>
+    <button id="saveBtn" style="display: none;">Save</button>
+    <button id="cancelBtn" style="display: none;">Cancel</button>
   </div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, child, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -97,7 +97,16 @@
     const db = getDatabase(app);
     const auth = getAuth(app);
 
-    const usernameFromHash = window.location.hash.slice(1);
+    const usernameHash = decodeURIComponent(window.location.hash.slice(1));
+    if (!usernameHash) {
+      document.getElementById("profileContent").innerHTML = "<p>No username provided in URL (#username).</p>";
+      throw new Error("No username hash in URL.");
+    }
+
+    const profileRef = ref(db, 'profiles/' + usernameHash);
+
+    let currentUserUID = null;
+    let loadedProfile = null;
 
     const nicknameText = document.getElementById("nicknameText");
     const nicknameInput = document.getElementById("nicknameInput");
@@ -111,58 +120,40 @@
     const saveBtn = document.getElementById("saveBtn");
     const cancelBtn = document.getElementById("cancelBtn");
 
-    let profileRef = null;
-    let loadedProfile = {};
-    let currentUser = null;
-
     function showEditMode(enabled) {
       nicknameText.style.display = enabled ? "none" : "block";
       bioText.style.display = enabled ? "none" : "block";
       nicknameInput.style.display = enabled ? "block" : "none";
       bioInput.style.display = enabled ? "block" : "none";
+      editBtn.style.display = enabled ? "none" : "inline-block";
       saveBtn.style.display = enabled ? "inline-block" : "none";
       cancelBtn.style.display = enabled ? "inline-block" : "none";
-      editBtn.style.display = enabled ? "none" : "inline-block";
-      changePicBtn.style.display = enabled && currentUser?.uid === loadedProfile.uid ? "inline-block" : "none";
     }
 
-    async function loadProfile() {
-      try {
-        const unameSnap = await get(child(ref(db), "usernames/" + usernameFromHash));
-        if (!unameSnap.exists()) {
-          document.getElementById("profileContent").innerHTML = "<p>User not found.</p>";
-          return;
-        }
-
-        const uid = unameSnap.val();
-        profileRef = ref(db, "profiles/" + uid);
-
-        const profileSnap = await get(profileRef);
-        if (!profileSnap.exists()) {
-          document.getElementById("profileContent").innerHTML = "<p>Profile not found.</p>";
-          return;
-        }
-
-        loadedProfile = profileSnap.val();
-
-        document.getElementById("usernameText").textContent = "@" + loadedProfile.username;
-        nicknameText.textContent = loadedProfile.nickname || loadedProfile.username;
-        bioText.textContent = loadedProfile.bio || "";
-        profilePic.src = loadedProfile.profilePic || "https://via.placeholder.com/100";
-
-        onAuthStateChanged(auth, user => {
-          currentUser = user;
-          if (user && user.uid === uid) {
-            editBtn.style.display = "inline-block";
-            changePicBtn.style.display = "inline-block";
-          }
-        });
-
-      } catch (err) {
-        console.error("Error loading profile:", err);
-        document.getElementById("profileContent").innerHTML = "<p>Error loading profile</p>";
+    get(profileRef).then(snapshot => {
+      if (!snapshot.exists()) {
+        document.getElementById("profileContent").innerHTML = `<p>User '${usernameHash}' not found.</p>`;
+        console.warn("Profile not found for:", usernameHash);
+        return;
       }
-    }
+
+      loadedProfile = snapshot.val();
+      document.getElementById("usernameText").textContent = "@" + loadedProfile.username;
+      nicknameText.textContent = loadedProfile.nickname || loadedProfile.username;
+      bioText.textContent = loadedProfile.bio || "";
+      profilePic.src = loadedProfile.profilePic || "https://via.placeholder.com/100";
+
+      onAuthStateChanged(auth, user => {
+        if (user && user.uid === loadedProfile.uid) {
+          currentUserUID = user.uid;
+          editBtn.style.display = "inline-block";
+          changePicBtn.style.display = "inline-block";
+        }
+      });
+    }).catch(err => {
+      console.error("Error loading profile:", err);
+      document.getElementById("profileContent").innerHTML = `<p>Error loading profile. ${err.message}</p>`;
+    });
 
     editBtn.addEventListener("click", () => {
       nicknameInput.value = loadedProfile.nickname || "";
@@ -172,24 +163,26 @@
 
     cancelBtn.addEventListener("click", () => showEditMode(false));
 
-    saveBtn.addEventListener("click", async () => {
+    saveBtn.addEventListener("click", () => {
       const newNickname = nicknameInput.value.trim();
       const newBio = bioInput.value.trim();
-      try {
-        await update(profileRef, {
-          nickname: newNickname,
-          bio: newBio
-        });
+
+      update(profileRef, {
+        nickname: newNickname,
+        bio: newBio
+      }).then(() => {
         nicknameText.textContent = newNickname || loadedProfile.username;
         bioText.textContent = newBio;
         showEditMode(false);
-      } catch (err) {
+      }).catch(err => {
         alert("Failed to save profile.");
         console.error(err);
-      }
+      });
     });
 
-    changePicBtn.addEventListener("click", () => fileInput.click());
+    changePicBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
 
     fileInput.addEventListener("change", async (e) => {
       const file = e.target.files[0];
@@ -221,8 +214,6 @@
         console.error(err);
       }
     });
-
-    loadProfile();
   </script>
 </body>
 </html>
