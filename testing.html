@@ -309,12 +309,20 @@
       .catch(error => alert("Signup error: " + error.message));
   };
 
-  saveProfileBtn.onclick = () => {
-    if (!currentUser?.uid) return;
-    saveProfile(currentUser.uid).then(() => {
+  saveProfileBtn.onclick = async () => {
+  if (!currentUser?.uid) return;
+  try {
+    await saveProfile(currentUser.uid);
+    userProfile = await fetchProfile(currentUser.uid);
+    if (userProfile && userProfile.username) {
       showChat();
-    });
-  };
+    } else {
+      alert("Profile not saved correctly. Please try again.");
+    }
+  } catch (err) {
+    alert("Error saving profile: " + err.message);
+  }
+};
 
   loginBtn.onclick = () => {
     const email = emailInput.value.trim();
