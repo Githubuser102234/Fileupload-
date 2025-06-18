@@ -51,6 +51,11 @@
     padding: 0.5rem 1rem;
     font-size: 1rem;
   }
+  #errorMsg {
+    color: red;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+  }
   /* Mobile responsiveness */
   @media (max-width: 480px) {
     body {
@@ -89,6 +94,7 @@
     <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
     <button id="sendBtn">Send</button>
   </div>
+  <p id="errorMsg"></p> <!-- 🔴 Error message will show here -->
 </div>
 
 <script type="module">
@@ -113,7 +119,6 @@
     onAuthStateChanged,
   } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
 
-  // Your Firebase config - replace with yours!
   const firebaseConfig = {
     apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
     authDomain: "fileupload-3fd69.firebaseapp.com",
@@ -130,7 +135,6 @@
   const db = getDatabase(app);
   const auth = getAuth(app);
 
-  // UI elements
   const authArea = document.getElementById("authArea");
   const chatArea = document.getElementById("chatArea");
   const messagesList = document.getElementById("messagesList");
@@ -142,10 +146,19 @@
   const loginBtn = document.getElementById("loginBtn");
   const logoutBtn = document.getElementById("logoutBtn");
   const authStatus = document.getElementById("authStatus");
+  const errorMsg = document.getElementById("errorMsg");
 
   const messagesRef = ref(db, "messages");
 
   let currentUser = null;
+
+  function showError(message) {
+    errorMsg.textContent = message;
+  }
+
+  function clearError() {
+    errorMsg.textContent = "";
+  }
 
   function createMessageElement(key, msg) {
     const li = document.createElement("li");
@@ -204,7 +217,7 @@
           buttons.forEach(b => b.style.display = "");
           li.removeChild(saveBtn);
           li.removeChild(cancelBtn);
-        });
+        }).catch(err => showError("Edit error: " + err.message));
     };
 
     const cancelBtn = document.createElement("button");
@@ -222,14 +235,13 @@
 
   function deleteMessage(key) {
     if (confirm("Are you sure you want to delete this message?")) {
-      remove(ref(db, "messages/" + key));
+      remove(ref(db, "messages/" + key)).catch(err => showError("Delete error: " + err.message));
     }
   }
 
   function addMessageToList(key, msg) {
     const existing = messagesList.querySelector(`li[data-key="${key}"]`);
     if (existing) {
-      // Update message text if already exists (for edit)
       const contentSpan = existing.querySelector(".msg-content");
       contentSpan.textContent = `[${new Date(msg.timestamp).toLocaleTimeString()}] ${msg.sender}: ${msg.text}`;
       return;
@@ -239,17 +251,28 @@
     messagesList.scrollTop = messagesList.scrollHeight;
   }
 
-  // Listen for new or changed messages
-  onChildAdded(messagesRef, (snapshot) => {
-    addMessageToList(snapshot.key, snapshot.val());
-  });
+  onChildAdded(messagesRef,
+    (snapshot) => {
+      clearError();
+      addMessageToList(snapshot.key, snapshot.val());
+    },
+    (error) => {
+      showError("Stream error: " + error.message);
+    }
+  );
 
-  onValue(messagesRef, (snapshot) => {
-    if (!snapshot.exists()) return;
-    snapshot.forEach(childSnap => {
-      if (childSnap.exists()) addMessageToList(childSnap.key, childSnap.val());
-    });
-  });
+  onValue(messagesRef,
+    (snapshot) => {
+      if (!snapshot.exists()) return;
+      clearError();
+      snapshot.forEach(childSnap => {
+        if (childSnap.exists()) addMessageToList(childSnap.key, childSnap.val());
+      });
+    },
+    (error) => {
+      showError("Stream error: " + error.message);
+    }
+  );
 
   sendBtn.onclick = () => {
     const text = inputMsg.value.trim();
@@ -262,9 +285,15 @@
       sender: currentUser.email,
       timestamp: Date.now(),
       uid: currentUser.uid,
+    })
+    .then(() => {
+      inputMsg.value = "";
+      inputMsg.focus();
+      clearError();
+    })
+    .catch(error => {
+      showError("Send error: " + error.message);
     });
-    inputMsg.value = "";
-    inputMsg.focus();
   };
 
   inputMsg.addEventListener("keypress", (e) => {
@@ -308,7 +337,7 @@
       authStatus.textContent = "Not logged in";
       authArea.style.display = "block";
       chatArea.style.display = "none";
-      messagesList.innerHTML = ""; // Clear messages on logout for simplicity
+      messagesList.innerHTML = "";
     }
   });
 </script>
