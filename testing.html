@@ -1,1 +1,355 @@
-Blank
+<!-- FULL HTML + JS CODE BELOW (Scroll down all the way) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Firebase Chat with Profiles</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 600px;
+    margin: 1rem auto;
+    padding: 0 1rem;
+  }
+  #authArea, #chatArea, #profileSetup {
+    margin-bottom: 1rem;
+  }
+  #messagesList {
+    list-style: none;
+    padding: 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    margin-bottom: 1rem;
+  }
+  #messagesList li {
+    padding: 0.5rem;
+    border-bottom: 1px solid #eee;
+    position: relative;
+  }
+  #messagesList li.you {
+    background: #e0f7fa;
+  }
+  #messagesList li button {
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+    cursor: pointer;
+    background: none;
+    border: none;
+    color: #007BFF;
+  }
+  #inputArea {
+    display: flex;
+    gap: 0.5rem;
+  }
+  #inputMsg {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 1rem;
+  }
+  button#sendBtn {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+  #errorMsg {
+    color: red;
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+  }
+  @media (max-width: 480px) {
+    body {
+      margin: 0.5rem;
+      max-width: 100%;
+      padding: 0 0.5rem;
+    }
+    #inputArea {
+      flex-direction: column;
+    }
+    #inputMsg {
+      width: 100%;
+    }
+    button#sendBtn {
+      width: 100%;
+    }
+  }
+  .nickname-link {
+    color: blue;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<h2>Firebase Chat with Profiles</h2>
+
+<div id="authArea">
+  <input id="email" type="email" placeholder="Email" autocomplete="username" />
+  <input id="password" type="password" placeholder="Password" autocomplete="current-password" />
+  <button id="signUpBtn">Sign Up</button>
+  <button id="loginBtn">Log In</button>
+  <button id="logoutBtn" style="display:none;">Log Out</button>
+  <p id="authStatus"></p>
+</div>
+
+<div id="profileSetup" style="display:none;">
+  <h3>Set up your profile</h3>
+  <input id="usernameInput" placeholder="Username (required)" />
+  <input id="nicknameInput" placeholder="Nickname (optional)" />
+  <input id="bioInput" placeholder="Bio (optional)" />
+  <button id="saveProfileBtn">Save Profile</button>
+</div>
+
+<div id="chatArea" style="display:none;">
+  <ul id="messagesList"></ul>
+  <div id="inputArea">
+    <input id="inputMsg" placeholder="Type a message..." autocomplete="off" />
+    <button id="sendBtn">Send</button>
+  </div>
+  <p id="errorMsg"></p>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+  import { getDatabase, ref, onChildAdded, push, set, update, remove, onValue, get } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
+    authDomain: "fileupload-3fd69.firebaseapp.com",
+    databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",
+    projectId: "fileupload-3fd69",
+    storageBucket: "fileupload-3fd69.appspot.com",
+    messagingSenderId: "1048191531078",
+    appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
+    measurementId: "G-WCY0SGWCQX"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const auth = getAuth(app);
+
+  const authArea = document.getElementById("authArea");
+  const chatArea = document.getElementById("chatArea");
+  const messagesList = document.getElementById("messagesList");
+  const inputMsg = document.getElementById("inputMsg");
+  const sendBtn = document.getElementById("sendBtn");
+  const emailInput = document.getElementById("email");
+  const passwordInput = document.getElementById("password");
+  const signUpBtn = document.getElementById("signUpBtn");
+  const loginBtn = document.getElementById("loginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const authStatus = document.getElementById("authStatus");
+  const errorMsg = document.getElementById("errorMsg");
+
+  const usernameInput = document.getElementById("usernameInput");
+  const nicknameInput = document.getElementById("nicknameInput");
+  const bioInput = document.getElementById("bioInput");
+  const saveProfileBtn = document.getElementById("saveProfileBtn");
+  const profileSetup = document.getElementById("profileSetup");
+
+  const messagesRef = ref(db, "messages");
+  let currentUser = null;
+  let userProfile = null;
+
+  function showError(msg) {
+    errorMsg.textContent = msg;
+  }
+
+  function clearError() {
+    errorMsg.textContent = "";
+  }
+
+  function showProfileSetup() {
+    chatArea.style.display = "none";
+    profileSetup.style.display = "block";
+  }
+
+  function showChat() {
+    chatArea.style.display = "block";
+    profileSetup.style.display = "none";
+  }
+
+  function saveProfile(uid) {
+    const username = usernameInput.value.trim();
+    if (!username) return alert("Username is required.");
+    const nickname = nicknameInput.value.trim();
+    const bio = bioInput.value.trim();
+    const profile = { username, nickname, bio };
+    return set(ref(db, `profiles/${uid}`), profile);
+  }
+
+  function fetchProfile(uid) {
+    return get(ref(db, `profiles/${uid}`)).then(snap => snap.exists() ? snap.val() : null);
+  }
+
+  function createMessageElement(key, msg, senderProfile = {}) {
+    const li = document.createElement("li");
+    li.dataset.key = key;
+    const time = new Date(msg.timestamp).toLocaleTimeString();
+
+    const name = senderProfile.nickname || senderProfile.username || msg.sender;
+
+    const contentSpan = document.createElement("span");
+    contentSpan.className = "msg-content";
+
+    if (senderProfile.username) {
+      const nicknameLink = document.createElement("a");
+      nicknameLink.href = `https://githubuser102234.github.io/Fileupload-/profiles#${senderProfile.username}`;
+      nicknameLink.textContent = name;
+      nicknameLink.className = "nickname-link";
+      nicknameLink.target = "_blank";
+
+      contentSpan.append(`[${time}] `);
+      contentSpan.appendChild(nicknameLink);
+      contentSpan.append(`: ${msg.text}`);
+    } else {
+      contentSpan.textContent = `[${time}] ${msg.sender}: ${msg.text}`;
+    }
+
+    li.appendChild(contentSpan);
+
+    if (msg.uid === currentUser?.uid) {
+      li.classList.add("you");
+
+      const editBtn = document.createElement("button");
+      editBtn.textContent = "Edit";
+      editBtn.onclick = () => startEditMessage(li, key, msg);
+
+      const delBtn = document.createElement("button");
+      delBtn.textContent = "Delete";
+      delBtn.onclick = () => deleteMessage(key);
+
+      li.appendChild(editBtn);
+      li.appendChild(delBtn);
+    }
+
+    return li;
+  }
+
+  function startEditMessage(li, key, msg) {
+    const contentSpan = li.querySelector(".msg-content");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = msg.text;
+    input.style.width = "70%";
+
+    li.insertBefore(input, contentSpan);
+    li.removeChild(contentSpan);
+
+    const buttons = li.querySelectorAll("button");
+    buttons.forEach(b => b.style.display = "none");
+
+    const saveBtn = document.createElement("button");
+    const cancelBtn = document.createElement("button");
+
+    saveBtn.textContent = "Save";
+    cancelBtn.textContent = "Cancel";
+
+    saveBtn.onclick = () => {
+      const newText = input.value.trim();
+      if (!newText) return alert("Message cannot be empty.");
+      update(ref(db, "messages/" + key), { text: newText })
+        .then(() => location.reload());
+    };
+
+    cancelBtn.onclick = () => location.reload();
+
+    li.appendChild(saveBtn);
+    li.appendChild(cancelBtn);
+  }
+
+  function deleteMessage(key) {
+    if (confirm("Delete this message?")) {
+      remove(ref(db, "messages/" + key)).catch(err => showError("Delete error: " + err.message));
+    }
+  }
+
+  async function addMessageToList(key, msg) {
+    const profile = await fetchProfile(msg.uid);
+    const li = createMessageElement(key, msg, profile);
+    messagesList.appendChild(li);
+    messagesList.scrollTop = messagesList.scrollHeight;
+  }
+
+  onChildAdded(messagesRef, snapshot => {
+    clearError();
+    addMessageToList(snapshot.key, snapshot.val());
+  }, err => showError("Stream error: " + err.message));
+
+  sendBtn.onclick = () => {
+    const text = inputMsg.value.trim();
+    if (!text) return alert("Message cannot be empty.");
+    if (!currentUser) return alert("You must be logged in.");
+    const newMsgRef = push(messagesRef);
+    set(newMsgRef, {
+      text,
+      sender: currentUser.email,
+      timestamp: Date.now(),
+      uid: currentUser.uid
+    }).then(() => {
+      inputMsg.value = "";
+      inputMsg.focus();
+    }).catch(err => showError("Send error: " + err.message));
+  };
+
+  inputMsg.addEventListener("keypress", (e) => {
+    if (e.key === "Enter") sendBtn.click();
+  });
+
+  signUpBtn.onclick = () => {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) return alert("Email and password required.");
+    createUserWithEmailAndPassword(auth, email, password)
+      .then(() => {
+        showProfileSetup();
+      })
+      .catch(error => alert("Signup error: " + error.message));
+  };
+
+  saveProfileBtn.onclick = () => {
+    if (!currentUser?.uid) return;
+    saveProfile(currentUser.uid).then(() => {
+      showChat();
+    });
+  };
+
+  loginBtn.onclick = () => {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) return alert("Email and password required.");
+    signInWithEmailAndPassword(auth, email, password).catch(error => {
+      alert("Login failed: " + error.message);
+    });
+  };
+
+  logoutBtn.onclick = () => {
+    signOut(auth);
+  };
+
+  onAuthStateChanged(auth, async user => {
+    currentUser = user;
+    if (user) {
+      authStatus.textContent = `Logged in as ${user.email}`;
+      authArea.style.display = "none";
+      logoutBtn.style.display = "inline-block";
+      const profile = await fetchProfile(user.uid);
+      if (!profile || !profile.username) {
+        showProfileSetup();
+      } else {
+        userProfile = profile;
+        showChat();
+      }
+    } else {
+      authStatus.textContent = "Not logged in";
+      authArea.style.display = "block";
+      chatArea.style.display = "none";
+      profileSetup.style.display = "none";
+      messagesList.innerHTML = "";
+    }
+  });
+</script>
+</body>
+</html>
