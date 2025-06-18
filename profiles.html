@@ -16,31 +16,16 @@
       padding: 20px;
       border-radius: 10px;
       box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      text-align: center;
     }
     .profile-pic {
       width: 100px;
       height: 100px;
       background-color: #ccc;
       border-radius: 50%;
-      margin: auto;
+      object-fit: cover;
       display: block;
-    }
-    h2, p {
-      text-align: center;
-    }
-    #editProfileBtn, #saveBtn, #cancelBtn {
-      display: none;
-      margin: 1em auto 0;
-      display: block;
-      padding: 10px 20px;
-      background-color: #007bff;
-      color: white;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-    #editProfileBtn:hover, #saveBtn:hover, #cancelBtn:hover {
-      background-color: #0056b3;
+      margin: 0 auto 10px;
     }
     .edit-field {
       display: block;
@@ -50,11 +35,35 @@
       padding: 8px;
       font-size: 1em;
     }
+    button {
+      margin: 0.5em;
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    #fileInput {
+      display: none;
+    }
+    #changePicBtn {
+      background-color: #28a745;
+    }
+    #changePicBtn:hover {
+      background-color: #1e7e34;
+    }
   </style>
 </head>
 <body>
   <div class="profile-container" id="profileContent">
-    <div class="profile-pic" id="profilePic"></div>
+    <img id="profilePic" class="profile-pic" src="" alt="Profile Picture">
+    <input type="file" id="fileInput" accept="image/*" />
+    <button id="changePicBtn" style="display:none;">Change Picture</button>
+
     <h2 id="nicknameText">Loading...</h2>
     <input type="text" id="nicknameInput" class="edit-field" style="display:none;" />
 
@@ -68,10 +77,9 @@
     <button id="cancelBtn">Cancel</button>
   </div>
 
-  <!-- Firebase -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getDatabase, ref, get, set, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+    import { getDatabase, ref, get, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
     import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
     const firebaseConfig = {
@@ -99,6 +107,9 @@
     const nicknameInput = document.getElementById("nicknameInput");
     const bioText = document.getElementById("bioText");
     const bioInput = document.getElementById("bioInput");
+    const profilePic = document.getElementById("profilePic");
+    const fileInput = document.getElementById("fileInput");
+    const changePicBtn = document.getElementById("changePicBtn");
 
     const editBtn = document.getElementById("editProfileBtn");
     const saveBtn = document.getElementById("saveBtn");
@@ -110,13 +121,8 @@
       nicknameInput.style.display = enabled ? "block" : "none";
       bioInput.style.display = enabled ? "block" : "none";
       editBtn.style.display = enabled ? "none" : "block";
-      saveBtn.style.display = enabled ? "block" : "none";
-      cancelBtn.style.display = enabled ? "block" : "none";
-
-      if (enabled && loadedProfile) {
-        nicknameInput.value = loadedProfile.nickname || "";
-        bioInput.value = loadedProfile.bio || "";
-      }
+      saveBtn.style.display = enabled ? "inline-block" : "none";
+      cancelBtn.style.display = enabled ? "inline-block" : "none";
     }
 
     get(profileRef).then(snapshot => {
@@ -130,13 +136,13 @@
       document.getElementById("usernameText").textContent = "@" + loadedProfile.username;
       nicknameText.textContent = loadedProfile.nickname || loadedProfile.username;
       bioText.textContent = loadedProfile.bio || "";
+      profilePic.src = loadedProfile.profilePic || "https://via.placeholder.com/100";
 
       onAuthStateChanged(auth, user => {
-        if (user) {
+        if (user && user.uid === loadedProfile.uid) {
           currentUserUID = user.uid;
-          if (user.uid === loadedProfile.uid) {
-            editBtn.style.display = "block";
-          }
+          editBtn.style.display = "inline-block";
+          changePicBtn.style.display = "inline-block";
         }
       });
     }).catch(err => {
@@ -144,7 +150,11 @@
       document.getElementById("profileContent").innerHTML = "<p>Error loading profile</p>";
     });
 
-    editBtn.addEventListener("click", () => showEditMode(true));
+    editBtn.addEventListener("click", () => {
+      nicknameInput.value = loadedProfile.nickname || "";
+      bioInput.value = loadedProfile.bio || "";
+      showEditMode(true);
+    });
 
     cancelBtn.addEventListener("click", () => showEditMode(false));
 
@@ -163,6 +173,41 @@
         alert("Failed to save profile.");
         console.error(err);
       });
+    });
+
+    changePicBtn.addEventListener("click", () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("image", file);
+
+      try {
+        const response = await fetch("https://api.imgur.com/3/image", {
+          method: "POST",
+          headers: {
+            Authorization: "Client-ID 74a60406f765b96"
+          },
+          body: formData
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          const imageUrl = data.data.link;
+          await update(profileRef, { profilePic: imageUrl });
+          profilePic.src = imageUrl;
+        } else {
+          alert("Failed to upload image.");
+          console.error(data);
+        }
+      } catch (err) {
+        alert("Error uploading to Imgur.");
+        console.error(err);
+      }
     });
   </script>
 </body>
