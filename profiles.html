@@ -1,190 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>User Profile</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      max-width: 600px;
-      margin: 1rem auto;
-      padding: 1rem;
-    }
-    #profilePic {
-      width: 120px;
-      height: 120px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 2px solid #ddd;
-      margin-bottom: 1rem;
-    }
-    .field {
-      margin-bottom: 1rem;
-    }
-    label {
-      display: block;
-      margin-bottom: 0.25rem;
-    }
-    input, textarea {
-      width: 100%;
-      padding: 0.5rem;
-    }
-    #editForm {
-      display: none;
-      border-top: 1px solid #ccc;
-      margin-top: 2rem;
-      padding-top: 1rem;
-    }
-    #saveBtn {
-      padding: 0.5rem 1rem;
-      font-size: 1rem;
-    }
-    #status {
-      color: green;
-      margin-top: 0.5rem;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>User Profile</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    max-width: 600px;
+    margin: 2rem auto;
+    padding: 1rem;
+  }
+  #profile-picture {
+    width: 150px;
+    height: 150px;
+    background-color: #ddd;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+  #edit-button {
+    margin-top: 1rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+</style>
 </head>
 <body>
+  <h1>User Profile</h1>
+  <img id="profile-picture" src="" alt="Profile Picture" />
+  <h2 id="nickname">Loading...</h2>
+  <p><strong>Username:</strong> <span id="username">Loading...</span></p>
+  <p><strong>Bio:</strong> <span id="bio">Loading...</span></p>
+  <button id="edit-button" style="display:none;">Edit Profile</button>
 
-<h2>User Profile</h2>
-<img id="profilePic" src="https://via.placeholder.com/120?text=No+Image" alt="Profile Picture" />
-<p><strong>Nickname:</strong> <span id="nickname">Loading...</span></p>
-<p><strong>Username:</strong> <span id="username">Loading...</span></p>
-<p><strong>Bio:</strong> <span id="bio">Loading...</span></p>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-app.js";
+    import { getDatabase, ref, get } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-database.js";
+    import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.1.0/firebase-auth.js";
 
-<button id="editBtn" style="display:none;">Edit Profile</button>
-
-<div id="editForm">
-  <h3>Edit Profile</h3>
-  <div class="field">
-    <label for="nicknameInput">Nickname</label>
-    <input type="text" id="nicknameInput" />
-  </div>
-  <div class="field">
-    <label for="bioInput">Bio</label>
-    <textarea id="bioInput" rows="4"></textarea>
-  </div>
-  <!-- Profile Picture Support Later -->
-  <button id="saveBtn">Save Profile</button>
-  <p id="status"></p>
-</div>
-
-<script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
-  import { getDatabase, ref, get, set } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
-  import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.9.1/firebase-auth.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
-    authDomain: "fileupload-3fd69.firebaseapp.com",
-    databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",
-    projectId: "fileupload-3fd69",
-    storageBucket: "fileupload-3fd69.appspot.com",
-    messagingSenderId: "1048191531078",
-    appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
-    measurementId: "G-WCY0SGWCQX"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getDatabase(app);
-  const auth = getAuth(app);
-
-  const usernameHash = location.hash.replace("#", "").trim();
-  const profileRef = ref(db, `usernames/${usernameHash}`);
-  const nicknameEl = document.getElementById("nickname");
-  const usernameEl = document.getElementById("username");
-  const bioEl = document.getElementById("bio");
-  const profilePicEl = document.getElementById("profilePic");
-
-  const editBtn = document.getElementById("editBtn");
-  const editForm = document.getElementById("editForm");
-  const nicknameInput = document.getElementById("nicknameInput");
-  const bioInput = document.getElementById("bioInput");
-  const saveBtn = document.getElementById("saveBtn");
-  const statusMsg = document.getElementById("status");
-
-  let currentUid = null;
-  let viewedUid = null;
-
-  function loadProfile(uid) {
-    const userRef = ref(db, `profiles/${uid}`);
-    get(userRef).then(snapshot => {
-      if (!snapshot.exists()) {
-        nicknameEl.textContent = "(not set)";
-        usernameEl.textContent = usernameHash;
-        bioEl.textContent = "(not set)";
-        return;
-      }
-
-      const profile = snapshot.val();
-      viewedUid = uid;
-
-      nicknameEl.textContent = profile.nickname || "(not set)";
-      usernameEl.textContent = profile.username || usernameHash;
-      bioEl.textContent = profile.bio || "(not set)";
-      if (profile.profilePic) {
-        profilePicEl.src = profile.profilePic;
-      }
-
-      if (currentUid && currentUid === uid) {
-        editBtn.style.display = "inline-block";
-        nicknameInput.value = profile.nickname || "";
-        bioInput.value = profile.bio || "";
-      }
-    }).catch(err => {
-      console.error("Failed to load profile:", err);
-    });
-  }
-
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      currentUid = user.uid;
-    }
-
-    // Lookup UID by username
-    get(profileRef).then(snapshot => {
-      if (snapshot.exists()) {
-        const uid = snapshot.val();
-        loadProfile(uid);
-      } else {
-        nicknameEl.textContent = "(user not found)";
-        usernameEl.textContent = usernameHash;
-        bioEl.textContent = "(n/a)";
-      }
-    });
-  });
-
-  editBtn.onclick = () => {
-    editForm.style.display = "block";
-  };
-
-  saveBtn.onclick = () => {
-    const newNickname = nicknameInput.value.trim();
-    const newBio = bioInput.value.trim();
-
-    if (!currentUid || currentUid !== viewedUid) return;
-
-    const profileUpdate = {
-      nickname: newNickname,
-      bio: newBio
+    const firebaseConfig = {
+      apiKey: "AIzaSyCUvySwb2nW0pm8D2i70vU6_R0Z6i6gDHY",
+      authDomain: "fileupload-3fd69.firebaseapp.com",
+      databaseURL: "https://fileupload-3fd69-default-rtdb.firebaseio.com",
+      projectId: "fileupload-3fd69",
+      storageBucket: "fileupload-3fd69.appspot.com",
+      messagingSenderId: "1048191531078",
+      appId: "1:1048191531078:web:427c7f65e6637d9a84b247",
+      measurementId: "G-WCY0SGWCQX"
     };
 
-    const profileSaveRef = ref(db, `profiles/${currentUid}`);
-    set(profileSaveRef, {
-      ...profileUpdate,
-      username: usernameHash
-    })
-    .then(() => {
-      statusMsg.textContent = "Profile updated successfully!";
-      nicknameEl.textContent = newNickname || "(not set)";
-      bioEl.textContent = newBio || "(not set)";
-    })
-    .catch(err => {
-      statusMsg.textContent = "Failed to save profile: " + err.message;
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const auth = getAuth(app);
+
+    const nicknameEl = document.getElementById("nickname");
+    const usernameEl = document.getElementById("username");
+    const bioEl = document.getElementById("bio");
+    const profilePictureEl = document.getElementById("profile-picture");
+    const editButton = document.getElementById("edit-button");
+
+    // Get username from URL hash
+    let usernameHash = location.hash.slice(1);
+    console.log("Username from URL hash:", usernameHash);
+
+    if (!usernameHash) {
+      nicknameEl.textContent = "No username specified in URL.";
+      usernameEl.textContent = "-";
+      bioEl.textContent = "-";
+      profilePictureEl.style.display = "none";
+      throw new Error("No username hash found in URL");
+    }
+
+    // Helper function to show errors
+    function showError(msg) {
+      nicknameEl.textContent = "Error loading profile";
+      usernameEl.textContent = "-";
+      bioEl.textContent = msg;
+      profilePictureEl.style.display = "none";
+    }
+
+    // Listen for auth state to get current user UID
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log("Logged in as UID:", user.uid);
+        loadUidFromUsername(usernameHash, user.uid);
+      } else {
+        console.warn("User not logged in. Reading profile may fail.");
+        // Still attempt to load profile even if not logged in, for testing
+        loadUidFromUsername(usernameHash, null);
+      }
     });
-  };
-</script>
+
+    async function loadUidFromUsername(username, currentUserUid) {
+      try {
+        const usernameRef = ref(db, `usernames/${username}`);
+        const snapshot = await get(usernameRef);
+        if (!snapshot.exists()) {
+          console.error(`Username "${username}" not found in database.`);
+          showError("(user not found)");
+          return;
+        }
+        const uid = snapshot.val();
+        console.log(`Found UID for username "${username}":`, uid);
+        loadProfile(uid, currentUserUid, username);
+      } catch (error) {
+        console.error("Failed to fetch username data:", error);
+        showError("Failed to load user data");
+      }
+    }
+
+    async function loadProfile(uid, currentUserUid, username) {
+      try {
+        const profileRef = ref(db, `profiles/${uid}`);
+        const snapshot = await get(profileRef);
+        if (!snapshot.exists()) {
+          console.warn(`Profile not found for UID: ${uid}`);
+          nicknameEl.textContent = "(not set)";
+          usernameEl.textContent = username;
+          bioEl.textContent = "(not set)";
+          profilePictureEl.style.display = "none";
+          return;
+        }
+        const profileData = snapshot.val();
+        console.log("Profile data:", profileData);
+
+        nicknameEl.textContent = profileData.nickname || "(not set)";
+        usernameEl.textContent = username;
+        bioEl.textContent = profileData.bio || "(not set)";
+        if (profileData.profilePictureUrl) {
+          profilePictureEl.src = profileData.profilePictureUrl;
+          profilePictureEl.style.display = "block";
+        } else {
+          profilePictureEl.style.display = "none";
+        }
+
+        if (currentUserUid === uid) {
+          editButton.style.display = "inline-block";
+          editButton.onclick = () => {
+            location.href = `/edit-profile.html#${username}`;
+          };
+        } else {
+          editButton.style.display = "none";
+        }
+      } catch (error) {
+        console.error("Failed to fetch profile data:", error);
+        showError("Failed to load profile");
+      }
+    }
+  </script>
 </body>
 </html>
